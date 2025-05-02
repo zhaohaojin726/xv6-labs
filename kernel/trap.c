@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "kernel/syscall.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -65,6 +66,7 @@ usertrap(void)
     intr_on();
 
     syscall();
+   
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

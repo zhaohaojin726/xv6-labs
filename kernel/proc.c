@@ -274,7 +274,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
+  np->traced_syscall=p->traced_syscall;
   np->parent = p;
 
   // copy saved user registers.

@@ -6,7 +6,6 @@
 #include "proc.h"
 #include "syscall.h"
 #include "defs.h"
-
 // Fetch the uint64 at addr from the current process.
 int
 fetchaddr(uint64 addr, uint64 *ip)
@@ -30,7 +29,6 @@ fetchstr(uint64 addr, char *buf, int max)
     return err;
   return strlen(buf);
 }
-
 static uint64
 argraw(int n)
 {
@@ -104,6 +102,7 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
+extern uint64 sys_trace(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -127,17 +126,44 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_trace]   sys_trace,
 };
-
 void
 syscall(void)
 {
   int num;
   struct proc *p = myproc();
+  char name[23][10];
+  strncpy(name[1],"fork",10);
+	strncpy(name[2],"exit",10);
+	strncpy(name[3],"wait",10);
+	strncpy(name[4],"pipe",10);
+	strncpy(name[5],"read",10);
+	strncpy(name[6],"kill",10);
+	strncpy(name[7],"exec",10);
+	strncpy(name[8],"fstat",10);
+	strncpy(name[9],"chdir",10);
+	strncpy(name[10],"dup",10);
+	strncpy(name[11],"getpid",10);
+	strncpy(name[12],"sbrk",10);
+	strncpy(name[13],"sleep",10);
+	strncpy(name[14],"uptime",10);
+	strncpy(name[15],"open",10);
+	strncpy(name[16],"write",10);
+	strncpy(name[17],"mknod",10);
+	strncpy(name[18],"unlink",10);
+	strncpy(name[19],"link",10);
+	strncpy(name[20],"mkdir",10);
+	strncpy(name[21],"close",10);
+	strncpy(name[22],"trace",10);
+
+
 
   num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     p->trapframe->a0 = syscalls[num]();
+    if(myproc()->traced_syscall==num)
+	    printf("%d -> syscall %s %d",myproc()->pid,name[num],p->trapframe->a0);
   } else {
     printf("%d %s: unknown sys call %d\n",
             p->pid, p->name, num);
