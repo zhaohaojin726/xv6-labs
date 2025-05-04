@@ -693,3 +693,17 @@ procdump(void)
     printf("\n");
   }
 }
+int get_process_count(uint64 addr)
+{
+	int count=0;
+	struct proc *p;
+	for(p=proc; p< &proc[NPROC];p++){
+		if(p->state!=UNUSED){
+			count++;
+		}
+	}
+  struct proc *mp=myproc();
+  if(copyout(mp->pagetable,addr,(char*)&count,sizeof(count))<0)
+    return -1;
+	return 0;
+}

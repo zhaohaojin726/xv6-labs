@@ -6,7 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
-
+#include "sysinfo.h"
 uint64
 sys_exit(void)
 {
@@ -103,4 +103,19 @@ sys_trace(void)
 		return -1;
 	myproc()->traced_syscall = syscall_num;
 	return 0;
+}
+struct sysinfo;
+int get_free_memory(uint64 addr);
+int get_process_count(uint64 addr);
+uint64
+sys_sysinfo(void)
+{
+  uint64 info;
+  if(argaddr(0,&info) < 0)
+    return -1;
+  if(get_free_memory((uint64)(&(((struct sysinfo*)info)->freemem)))<0)
+    return -1;
+  if(get_process_count((uint64)(&(((struct sysinfo*)info)->nproc)))<0)
+    return -1;
+  return 0;
 }
