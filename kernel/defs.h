@@ -178,7 +178,18 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
-
+int             copyin_new(pagetable_t, char *, uint64, uint64);
+int             copyinstr_new(pagetable_t, char *, uint64, uint64);
+  
+void            vmprint(pagetable_t);
+pagetable_t     ukvminit();
+void            freewalk(pagetable_t);
+void            uprockvmfree(struct proc *);
+void            ukvmunmap(pagetable_t, uint64, uint64);
+void            ufreewalk(pagetable_t);
+void            ukvmmap(pagetable_t, uint64, uint64, uint64, int);
+int             ukvmcopy(struct proc *);
+int             ukvmcopyrange(pagetable_t upagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz);
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);

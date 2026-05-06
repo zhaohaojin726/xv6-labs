@@ -113,6 +113,18 @@ found:
     return 0;
   }
 
+  p->kpagetable = ukvminit();
+  if(p->kpagetable == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  uint64 va = KSTACK((int) (p - proc));
+  uint64 pa = kvmpa(va); //在procinit中物理页面已分配所以这里直接将va转化为pa映射即可
+  memset((void *)pa, 0, PGSIZE);
+  ukvmmap(p->kpagetable, va, pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -139,6 +151,8 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  int sz = p->sz;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -150,6 +164,15 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+
+  //新增
+  if(p->kpagetable){
+    ukvmunmap(p->kpagetable, 0, PGROUNDUP(sz)/PGSIZE);
+    uprockvmfree(p);
+    p->kpagetable = 0;
+  }
+  if(p->kstack)
+    p->kstack=0;
 }
 
 // Create a user page table for a given process,
@@ -181,7 +204,6 @@ proc_pagetable(struct proc *p)
     uvmfree(pagetable, 0);
     return 0;
   }
-
   return pagetable;
 }
 
@@ -221,6 +243,8 @@ userinit(void)
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
+  ukvmcopyrange(p->pagetable, p->kpagetable, 0, PGSIZE);
+
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -242,11 +266,19 @@ growproc(int n)
   struct proc *p = myproc();
 
   sz = p->sz;
+  uint64 oldsz = sz;
   if(n > 0){
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+    if(ukvmcopyrange(p->pagetable, p->kpagetable, oldsz, sz) < 0){
+      uvmdealloc(p->pagetable, sz, oldsz);
+      return -1;
+    }
+    sfence_vma();
   } else if(n < 0){
+    ukvmunmap(p->kpagetable, PGROUNDUP(sz+n), (PGROUNDUP(sz)-PGROUNDUP(sz+n))/PGSIZE);
+    sfence_vma();
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
   p->sz = sz;
@@ -274,7 +306,11 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
+  if(ukvmcopyrange(np->pagetable, np->kpagetable, 0, p->sz)<0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
   np->parent = p;
 
   // copy saved user registers.
@@ -473,8 +509,14 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        
+        
+        //新增
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
         swtch(&c->context, &p->context);
-
+        
+        kvminithart();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;

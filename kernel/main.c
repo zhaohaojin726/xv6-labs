@@ -40,7 +40,8 @@ main()
     started = 1;
   } else {
     while(started == 0)
-      ;
+     ;
+      
     __sync_synchronize();
     printf("hart %d starting\n", cpuid());
     kvminithart();    // turn on paging

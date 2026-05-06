@@ -33,6 +33,10 @@ copyin_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 
   if (srcva >= p->sz || srcva+len >= p->sz || srcva+len < srcva)
     return -1;
+  for(int test_addr = PGROUNDDOWN(srcva); test_addr < srcva+len-1; test_addr+=PGSIZE){
+    if(walkaddr(pagetable, test_addr) == 0)
+      return -1;
+  }
   memmove((void *) dst, (void *)srcva, len);
   stats.ncopyin++;   // XXX lock
   return 0;
@@ -50,6 +54,8 @@ copyinstr_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   
   stats.ncopyinstr++;   // XXX lock
   for(int i = 0; i < max && srcva + i < p->sz; i++){
+    if(walkaddr(pagetable, srcva)==0) 
+      return -1;
     dst[i] = s[i];
     if(s[i] == '\0')
       return 0;
