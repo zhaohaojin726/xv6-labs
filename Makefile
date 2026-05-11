@@ -260,6 +260,8 @@ GDBPORT = $(shell expr `id -u` % 5000 + 25000)
 QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \
 	else echo "-s -p $(GDBPORT)"; fi)
+GDB ?= gdb-multiarch
+GDBARGS = -iex "add-auto-load-safe-path $(CURDIR)/.gdbinit"
 ifndef CPUS
 CPUS := 3
 endif
@@ -285,8 +287,11 @@ qemu: $K/kernel fs.img
 	sed "s/:1234/:$(GDBPORT)/" < $^ > $@
 
 qemu-gdb: $K/kernel .gdbinit fs.img
-	@echo "*** Now run 'gdb' in another window." 1>&2
+	@echo "*** Now run 'make gdb' in another window." 1>&2
 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
+
+gdb: $K/kernel .gdbinit
+	$(GDB) $(GDBARGS) $K/kernel
 
 ifeq ($(LAB),net)
 # try to generate a unique port for the echo server

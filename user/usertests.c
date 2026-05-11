@@ -2548,6 +2548,7 @@ execout(char *s)
       // allocate all of memory.
       while(1){
         uint64 a = (uint64) sbrk(4096);
+        printf("%p\n", a);
         if(a == 0xffffffffffffffffLL)
           break;
         *(char*)(a + 4096 - 1) = 1;
