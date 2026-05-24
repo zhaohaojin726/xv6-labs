@@ -17,6 +17,16 @@ struct context {
   uint64 s10;
   uint64 s11;
 };
+#define MAXVMA 16
+struct vma{
+  int used;
+  uint64 addr;
+  int offset;
+  struct file* file;
+  int flags;
+  int prot;
+  int length;
+};
 
 // Per-CPU state.
 struct cpu {
@@ -103,4 +113,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct vma vmas[MAXVMA];
+  uint64 mmapaddr;
 };

@@ -484,3 +484,86 @@ sys_pipe(void)
   }
   return 0;
 }
+
+
+uint64
+sys_mmap(){
+  uint64 addr;
+  int length, prot, flags, fd, offset;
+  struct file *f;
+
+  if(argaddr(0, &addr) < 0 || argint(1, &length) < 0 ||
+     argint(2, &prot) < 0 || argint(3, &flags) < 0 ||
+     argfd(4, &fd, &f) < 0 || argint(5, &offset) < 0)
+    return -1;
+  
+  if(length <= 0)
+    return -1;
+
+  if(offset < 0 || offset % PGSIZE != 0)
+    return -1;
+
+  if((prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
+    return -1;
+
+  if(flags != MAP_SHARED && flags != MAP_PRIVATE)
+    return -1;
+
+
+  struct proc* p = myproc();
+
+  if(!f->readable)
+    return -1;
+  
+  if((prot & PROT_WRITE) && flags == MAP_SHARED && !f->writable)
+    return -1;
+
+  int pos = -1;
+  for(int i=0; i<MAXVMA; i++){
+    if(p->vmas[i].used == 0){
+      pos = i;
+      break;
+    }
+  }
+
+  if(pos == -1)
+    return -1;
+
+  uint64 len = PGROUNDUP(length);
+  if(p->mmapaddr < len || p->mmapaddr - len < p->sz)
+    return -1;
+
+  p->mmapaddr -= len;
+
+  p->vmas[pos].used = 1;
+  p->vmas[pos].addr = p->mmapaddr;
+  p->vmas[pos].file = f;
+  p->vmas[pos].flags = flags;
+  p->vmas[pos].length = len;
+  p->vmas[pos].offset = offset;
+  p->vmas[pos].prot = prot;
+
+  filedup(p->vmas[pos].file);
+
+  return p->vmas[pos].addr;
+}
+
+
+uint64
+sys_munmap(void){
+  uint64 addr;
+  int length;
+
+  if(argaddr(0, &addr) < 0 || argint(1, &length) < 0)
+    return -1;
+  
+  if(length < 0)
+    return -1;
+  
+  if(addr % PGSIZE != 0)
+    return -1;
+
+  if(domunmap(addr, length) < 0)
+    return -1;
+  return 0;
+}

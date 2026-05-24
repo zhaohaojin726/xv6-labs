@@ -3,8 +3,12 @@
 #include "memlayout.h"
 #include "riscv.h"
 #include "spinlock.h"
+#include "sleeplock.h"
+#include "fs.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
+#include "file.h"
 
 struct cpu cpus[NCPU];
 
@@ -133,7 +137,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  p->mmapaddr = TRAPFRAME;
   return p;
 }
 
@@ -157,6 +161,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->mmapaddr = 0;
 }
 
 // Create a user page table for a given process,
@@ -296,6 +301,14 @@ fork(void)
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
 
+  np->mmapaddr = p->mmapaddr;
+
+  for(int i = 0; i < MAXVMA; i++){
+    np->vmas[i] = p->vmas[i];
+    if(np->vmas[i].used)
+      filedup(np->vmas[i].file);
+  }
+
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -352,7 +365,11 @@ exit(int status)
       p->ofile[fd] = 0;
     }
   }
-
+  for(int i = 0; i < MAXVMA; i++){
+    if(p->vmas[i].used == 1){
+      domunmap(p->vmas[i].addr, p->vmas[i].length);
+    }
+  }
   begin_op();
   iput(p->cwd);
   end_op();
@@ -700,4 +717,59 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+uint64 domunmap(uint64 addr, int length){
+  uint64 len = PGROUNDUP(length);
+  uint64 start = addr;
+  uint64 end = addr + len;
+
+  struct proc* p = myproc();
+  struct vma *v = 0;
+
+  for(int i=0; i<MAXVMA; i++){
+    if(p->vmas[i].used && p->vmas[i].addr <= start && p->vmas[i].addr + p->vmas[i].length >= end){
+      v = &p->vmas[i];
+      break;
+    }
+  }
+
+  if(!v){
+    return -1;
+  }
+
+  int unmap_head = (start == v->addr);
+  int unmap_tail = (end == v->addr + v->length);
+  if(!unmap_head && !unmap_tail){
+    return -1;
+  }
+  for(uint64 va = start; va < end; va += PGSIZE){
+    uint64 pa = walkaddr(p->pagetable, va);
+    if(pa == 0)
+      continue;
+    if(v->flags == MAP_SHARED){
+      uint64 fileoff = v->offset + (va - v->addr);
+
+      begin_op();
+      ilock(v->file->ip);
+      writei(v->file->ip, 0, pa, fileoff, PGSIZE);
+      iunlock(v->file->ip);
+      end_op();
+    }
+    
+    uvmunmap(p->pagetable, va, 1, 1);
+  }
+
+  if(unmap_head && unmap_tail){
+    fileclose(v->file);
+    v->used = 0;
+  }
+  else if(unmap_head){
+    v->addr += len;
+    v->length -= len;
+    v->offset += len;
+  }
+  else if(unmap_tail){
+    v->length -= len;
+  }
+  return 0;
 }
